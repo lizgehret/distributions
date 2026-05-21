@@ -127,6 +127,99 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: validate PR template
+      if: ${{ github.event_name == 'pull_request' }}
+      shell: bash
+      run: |
+        python <<'PY'
+        import json
+        import os
+        import re
+        import sys
+        import pathlib
+
+        event = json.loads(pathlib.Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+        body = event.get("pull_request", {}).get("body") or ""
+
+        def get_section(markdown, header):
+          lines = markdown.splitlines()
+          start = None
+
+          for i in range(len(lines) - 1):
+            if (
+              lines[i].strip().upper() == header
+              and re.fullmatch(r"-{3,}", lines[i + 1].strip())
+            ):
+              start = i + 2
+              break
+
+          if start is None:
+            return None
+
+          end = len(lines)
+          for i in range(start, len(lines) - 1):
+            if (
+              re.fullmatch(r"[A-Z][A-Z0-9 _/-]*", lines[i].strip())
+              and re.fullmatch(r"-{3,}", lines[i + 1].strip())
+            ):
+              end = i
+              break
+
+          return "\n".join(lines[start:end])
+
+        def clean(section):
+          if section is None:
+            return ""
+
+          section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
+          section = re.sub(
+            r"<details\b[^>]*>.*?</details>",
+            "",
+            section,
+            flags=re.DOTALL | re.IGNORECASE,
+          )
+          return section.strip()
+
+        errors = []
+
+        description = clean(get_section(body, "DESCRIPTION"))
+        if not description:
+          errors.append(
+            "DESCRIPTION must include a brief summary or an issue link."
+          )
+
+        ai_disclosure = clean(get_section(body, "AI DISCLOSURE"))
+        no_ai = bool(re.search(
+          r"(?im)^\s*-\s*\[[xX]\]\s*NO AI USED\.?\s*$",
+          ai_disclosure,
+        ))
+        ai_used = bool(re.search(
+          r"(?im)^\s*-\s*\[[xX]\]\s*AI USED\.?\s*$",
+          ai_disclosure,
+        ))
+
+        if no_ai == ai_used:
+          errors.append(
+            "AI DISCLOSURE must have exactly one checked option: "
+            "NO AI USED or AI USED."
+          )
+
+        ai_details = clean(get_section(body, "AI USAGE DETAILS"))
+        if ai_used and not ai_details:
+          errors.append(
+            "AI USAGE DETAILS must describe how AI was used when "
+            "AI USED is checked."
+          )
+
+        if errors:
+          print("PR template validation failed:")
+          for error in errors:
+            print(f"- {error}")
+          sys.exit(1)
+
+        print("PR template validation passed!")
+        PY
+
     - name: install dependencies
       run: |
         python -m pip install --upgrade pip
