@@ -181,12 +181,6 @@ jobs:
             return ""
 
           section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
-          section = re.sub(
-            r"<details\b[^>]*>.*?</details>",
-            "",
-            section,
-            flags=re.DOTALL | re.IGNORECASE,
-          )
           return section.strip()
 
         errors = []
