@@ -185,13 +185,13 @@ jobs:
 
         errors = []
 
-        description = clean(get_section(body, "DESCRIPTION"))
+        description = clean(get_section(body, "Description"))
         if not description:
           errors.append(
-            "DESCRIPTION must include a brief summary or an issue link."
+            "Description must include a brief summary or an issue link."
           )
 
-        ai_disclosure = clean(get_section(body, "AI DISCLOSURE"))
+        ai_disclosure = clean(get_section(body, "AI Disclosure"))
         no_ai = bool(re.search(
           r"(?im)^\s*-\s*\[[xX]\]\s*NO AI USED\.?\s*$",
           ai_disclosure,
@@ -203,14 +203,14 @@ jobs:
 
         if no_ai == ai_used:
           errors.append(
-            "AI DISCLOSURE must have exactly one checked option: "
+            "AI Disclosure must have exactly one checked option: "
             "NO AI USED or AI USED."
           )
 
-        ai_details = clean(get_section(body, "AI USAGE DETAILS"))
+        ai_details = clean(get_section(body, "AI Usage Details"))
         if ai_used and not ai_details:
           errors.append(
-            "AI USAGE DETAILS must describe how AI was used when "
+            "AI Usage Details must describe how AI was used when "
             "AI USED is checked."
           )
 
