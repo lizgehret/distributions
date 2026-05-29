@@ -182,7 +182,6 @@ jobs:
           return section.strip()
 
         if not body:
-          print('PR template validation failed:')
           print(
           """
           PR template has been removed.
