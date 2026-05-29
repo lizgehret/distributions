@@ -148,7 +148,7 @@ jobs:
             "--jq", ".body // \"\"",
           ],
           text=True,
-        )
+        ).strip()
 
         def get_section(markdown, header):
           lines = markdown.splitlines()
