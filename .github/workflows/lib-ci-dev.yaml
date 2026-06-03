@@ -135,7 +135,7 @@ jobs:
 
     - name: validate PR template
       if: ${{ inputs.validate-pr-template && github.event_name == 'pull_request' }}
-      uses: qiime2/distributions/.github/actions/validate-pr-template@dev
+      uses: lizgehret/distributions/.github/actions/validate-pr-template@dev
       with:
         gh-token: ${{ github.token }}
         gh-repo: ${{ github.repository }}
