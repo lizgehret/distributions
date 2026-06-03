@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+import textwrap
 
 from alp.common import ActionAdapter
 
@@ -50,7 +51,7 @@ def main(gh_token, gh_repo, pr_number):
 
     if not body:
         print('PR template validation failed:')
-        print(
+        print(textwrap.dedent(
         """
         PR template has been removed.
         Please copy/paste the template below back into the PR body and fill it out prior to requesting a review:
@@ -72,7 +73,7 @@ def main(gh_token, gh_repo, pr_number):
         # AI Usage Details
         <!-- REQUIRED if 'AI USED' is checked. This section can be deleted if 'NO AI USED' is checked. -->
         """
-        )
+        ))
 
         sys.exit(1)
 
