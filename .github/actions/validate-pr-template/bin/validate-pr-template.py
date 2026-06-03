@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import os
 import re
 import subprocess
 import sys
@@ -43,7 +42,7 @@ def main(gh_token, gh_repo, pr_number):
     body = subprocess.check_output(
         [
         "gh", "api",
-        f"repos/{os.environ[gh_repo]}/pulls/{os.environ[pr_number]}",
+        f"repos/{gh_repo}/pulls/{pr_number}",
         "--jq", ".body // \"\"",
         ],
         text=True,
