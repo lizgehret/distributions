@@ -39,7 +39,7 @@ def clean(section):
     section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
     return section.strip()
 
-def main(gh_repo, pr_number):
+def main(gh_token, gh_repo, pr_number):
     body = subprocess.check_output(
         [
         "gh", "api",
