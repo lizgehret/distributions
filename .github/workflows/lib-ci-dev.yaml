@@ -62,14 +62,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
+
       - name: install dependencies
         run: |
           pip install ghapi==1.0.6
 
       - name: "get distro info"
         id: yaml
-        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
 
@@ -109,7 +110,7 @@ jobs:
 
       - name: detect supported platform environments
         id: platform-support
-        uses: qiime2/distributions/.github/actions/detect-platforms@dev
+        uses: lizgehret/distributions/.github/actions/detect-platforms@dev
         with:
           epoch: ${{ fromJSON(steps.yaml.outputs.data).active_epoch }}
           distro: ${{ inputs.distro }}
@@ -241,8 +242,9 @@ jobs:
           submodules: true
 
       - uses: actions/checkout@v3
+
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
           path: ./distro
           sparse-checkout: ${{ env.seed_env_path }}
 
