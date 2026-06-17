@@ -142,7 +142,7 @@ packages:
   primary_distro: qiime2
 
 - name: q2-sample-classifier
-  repo: qiime2/q2-sample-classifier
+  repo: lizgehret/q2-sample-classifier
   distros: [qiime2]
   primary_distro: qiime2
 
@@ -167,7 +167,7 @@ packages:
   primary_distro: qiime2
 
 - name: q2-types
-  repo: qiime2/q2-types
+  repo: lizgehret/q2-types
   distros: [tiny, qiime2, moshpit, pathogenome, test]
   primary_distro: tiny
 
