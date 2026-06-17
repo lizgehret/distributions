@@ -181,8 +181,18 @@ jobs:
 
       - name: 'Set up test environment'
         run: |
-          conda create -y -p ${{ env.env_prefix }}
-          mkdir -p ${{ env.env_prefix }}/etc
+          if [ '${{ needs.setup.outputs.is-paired }}' == 'true' ]; then
+            # Paired- runs: create a full distro env from the seed env so that
+            # all packages in the effective distro are present before make dev
+            # installs the sibling. Without this, the sibling's entry point
+            # causes PluginManager to import the sibling, which may need
+            # packages (e.g. q2-feature-table) that aren't deps of self.
+            conda env create -y -p '${{ env.env_prefix }}' \
+              -f './distro/${{ env.seed_env_path }}'
+          else
+            conda create -y -p ${{ env.env_prefix }}
+          fi
+          mkdir -p '${{ env.env_prefix }}/etc'
           cat <<EOF > '${{ env.env_prefix }}/etc/activate.sh'
             . "$CONDA/etc/profile.d/conda.sh"
             conda activate '${{ env.env_prefix }}'
