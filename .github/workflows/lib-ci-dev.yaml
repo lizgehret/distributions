@@ -226,12 +226,28 @@ jobs:
 
       - uses: qiime2/action-library-packaging/install-package@beta
         name: 'Install ${{ github.event.repository.name }}'
+        # Paired- runs skip conda install: the test env is pre-populated from
+        # the seed env via `conda env create`, so the conda solver would reject
+        # installing a dev build whose version string doesn't satisfy other
+        # distro packages' constraints. make dev (below) handles the install
+        # instead, mirroring local development workflow.
+        if: needs.setup.outputs.is-paired != 'true'
         with:
           conda-activate: ${{ steps.setup-conda.outputs.conda-activate }}
           package-name: ${{ steps.build-package.outputs.package-name }}
           package-version: ${{ steps.build-package.outputs.package-version }}
           conda-prefix: ${{ env.env_prefix }}
           channels: ${{ steps.make-cbc.outputs.channels }}
+
+      - name: 'Install ${{ github.event.repository.name }} into test environment via make dev'
+        if: needs.setup.outputs.is-paired == 'true'
+        shell: bash
+        run: |
+          source '${{ env.env_prefix }}/etc/activate.sh'
+          conda activate '${{ env.env_prefix }}'
+          pushd '${{ env.plugin_path }}'
+          make dev
+          popd
 
       - name: 'Install paired dev package(s) into test environment'
         if: needs.setup.outputs.is-paired == 'true'
