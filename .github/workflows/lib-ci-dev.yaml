@@ -55,6 +55,10 @@ jobs:
     outputs:
       active-epoch: ${{ steps.platform-support.outputs.active-epoch }}
       platform-matrix: ${{ steps.platform-support.outputs.platform-matrix }}
+      is-paired: ${{ steps.detect-paired.outputs.is-paired }}
+      pair-ref: ${{ steps.detect-paired.outputs.pair-ref }}
+      paired-repos: ${{ steps.find-paired.outputs.paired-repos }}
+      effective-distro: ${{ steps.effective-distro.outputs.effective-distro }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -64,12 +68,47 @@ jobs:
         uses: qiime2/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
+
+      - name: "detect Paired- branch"
+        id: detect-paired
+        shell: bash
+        run: |
+          head_ref='${{ github.head_ref }}'
+
+          if [[ "$head_ref" == Paired-* ]]; then
+            echo "is-paired=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-paired=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "pair-ref=$(echo "$head_ref" | cut -f1 -d/)" >> "$GITHUB_OUTPUT"
+
+      - name: "find paired branch & resolve effective distro"
+        id: find-paired
+        if: steps.detect-paired.outputs.is-paired == 'true'
+        uses: lizgehret/distributions/.github/actions/find-paired-branch@dev
+        with:
+          packages: ${{ toJSON(fromJSON(steps.yaml.outputs.data).packages) }}
+          self-repo: ${{ github.repository }}
+          self-distro: ${{ inputs.distro }}
+          pair-ref: ${{ steps.detect-paired.outputs.pair-ref }}
+
+      - name: "determine effective distro"
+        id: effective-distro
+        shell: bash
+        run: |
+          if [ '${{ steps.detect-paired.outputs.is-paired }}' == 'true' ]; then
+            echo "effective-distro=${{ steps.find-paired.outputs.effective-distro }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "effective-distro=${{ inputs.distro }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: detect supported platform environments
         id: platform-support
         shell: bash
         run: |
           epoch='${{ fromJSON(steps.yaml.outputs.data).active_epoch }}'
-          distro='${{ inputs.distro }}'
+          distro='${{ steps.effective-distro.outputs.effective-distro }}'
           passed_dir="$epoch/$distro/passed"
           staged_dir="$epoch/$distro/staged"
 
@@ -154,8 +193,80 @@ jobs:
     - name: run q2lint
       run: q2lint
 
-  build-and-test:
+  build-paired-packages:
     needs: setup
+    if: needs.setup.outputs.is-paired == 'true'
+    name: 'build paired package: ${{ matrix.paired_repo.name }} (${{ matrix.platform.platform_label }})'
+    strategy:
+      fail-fast: false
+      matrix:
+        paired_repo: ${{ fromJSON(needs.setup.outputs.paired-repos) }}
+        platform: ${{ fromJSON(needs.setup.outputs.platform-matrix).include }}
+    runs-on: ${{ matrix.platform.runner_label }}
+    env:
+      plugin_path: ./repo
+      built_channel_path: ./built-channel
+      seed_env_path: ${{ needs.setup.outputs.active-epoch }}/${{ needs.setup.outputs.effective-distro }}/staged/${{ matrix.platform.seed_environment_file }}
+      CONDA_SUBDIR: ${{ matrix.platform.conda_subdir_env }}
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Checkout ${{ matrix.paired_repo.name }} @ ${{ needs.setup.outputs.pair-ref }}'
+        with:
+          repository: ${{ matrix.paired_repo.repo }}
+          ref: ${{ needs.setup.outputs.pair-ref }}
+          path: ${{ env.plugin_path }}
+          fetch-depth: 0
+          submodules: true
+
+      - uses: actions/checkout@v3
+        with:
+          repository: qiime2/distributions
+          path: ./distro
+          sparse-checkout: ${{ env.seed_env_path }}
+
+      - uses: qiime2/action-library-packaging/environment@beta
+        name: 'Set up build environment'
+        id: setup-conda
+
+      - name: 'Set up built channel'
+        run: |
+          ${{ steps.setup-conda.outputs.conda-activate }}
+          mkdir -p ${{ env.built_channel_path }}
+          python -m conda_index ${{ env.built_channel_path }}
+
+      - uses: qiime2/action-library-packaging/make-conda-config@beta
+        name: 'Create conda build config'
+        id: make-cbc
+        with:
+          conda-activate: ${{ steps.setup-conda.outputs.conda-activate }}
+          seed-environment: ./distro/${{ env.seed_env_path }}
+          conda-build-config: 'conda_build_config.yml'
+          channels: '["${{ env.built_channel_path }}"]'
+
+      - uses: qiime2/action-library-packaging/build-package@beta
+        # NOTE: assumes the sibling repo's recipe lives under `conda-recipe/`
+        # if this ever changes, this path will need to be adjusted
+        name: 'Build ${{ matrix.paired_repo.name }}'
+        id: build-package
+        with:
+          conda-activate: ${{ steps.setup-conda.outputs.conda-activate }}
+          recipe-path: ${{ env.plugin_path }}/conda-recipe/
+          conda-build-config: ${{ steps.make-cbc.outputs.conda-build-config }}
+          channels: ${{ steps.make-cbc.outputs.channels }}
+          output-channel: ${{ env.built_channel_path }}
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload built ${{ matrix.paired_repo.name }} package'
+        with:
+          name: paired-pkg-${{ matrix.paired_repo.name }}-${{ matrix.platform.platform_label }}
+          path: ${{ env.built_channel_path }}/${{ steps.build-package.outputs.conda-subdir }}/${{ steps.build-package.outputs.package-filename }}
+
+  build-and-test:
+    needs: [setup, build-paired-packages]
+    # build-paired-packages is conditional (Paired-* runs only); don't let
+    # being skipped count against us, but still respect setup/build-paired
+    # failures or cancellation.
+    if: ${{ !failure() && !cancelled() }}
     name: '${{ github.event.repository.name }} (${{ matrix.platform_label }})'
     strategy:
       fail-fast: false
@@ -164,7 +275,8 @@ jobs:
     env:
       plugin_path: ./repo
       built_channel_path: ./built-channel
-      seed_env_path: ${{ needs.setup.outputs.active-epoch }}/${{ inputs.distro }}/staged/${{ matrix.seed_environment_file }}
+      paired_packages_path: ./paired-packages
+      seed_env_path: ${{ needs.setup.outputs.active-epoch }}/${{ needs.setup.outputs.effective-distro }}/staged/${{ matrix.seed_environment_file }}
       env_prefix: ./test-env
       CONDA_SUBDIR: ${{ matrix.conda_subdir_env }}
     steps:
@@ -201,6 +313,22 @@ jobs:
           mkdir -p ${{ env.built_channel_path }}
           python -m conda_index ${{ env.built_channel_path }}
 
+      - name: 'Download paired package(s)'
+        if: needs.setup.outputs.is-paired == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: paired-pkg-*-${{ matrix.platform_label }}
+          path: ${{ env.paired_packages_path }}
+          merge-multiple: true
+
+      - name: 'Add paired package(s) to built channel'
+        if: needs.setup.outputs.is-paired == 'true'
+        run: |
+          ${{ steps.setup-conda.outputs.conda-activate }}
+          mkdir -p ${{ env.built_channel_path }}/${{ matrix.platform_label }}
+          cp ${{ env.paired_packages_path }}/* ${{ env.built_channel_path }}/${{ matrix.platform_label }}/
+          python -m conda_index ${{ env.built_channel_path }}
+
       - uses: qiime2/action-library-packaging/make-conda-config@beta
         name: 'Create conda build config'
         id: make-cbc
@@ -209,6 +337,27 @@ jobs:
           seed-environment: ./distro/${{ env.seed_env_path }}
           conda-build-config: 'conda_build_config.yml'
           channels: '["${{ env.built_channel_path }}"]'
+
+      - name: 'Install paired dev package(s) into test environment'
+        if: needs.setup.outputs.is-paired == 'true'
+        shell: bash
+        env:
+          # passed via env (rather than interpolated directly into the
+          # script) so the JSON's embedded quotes don't break shell parsing
+          CHANNELS_JSON: ${{ steps.make-cbc.outputs.channels }}
+        run: |
+          source ${{ env.env_prefix }}/etc/activate.sh
+          conda activate '${{ env.env_prefix }}'
+
+          channel_args=()
+          while IFS= read -r channel; do
+            channel_args+=(-c "$channel")
+          done < <(python -c "import json, os; print('\n'.join(json.loads(os.environ['CHANNELS_JSON'])))")
+
+          for pkg in ${{ env.paired_packages_path }}/*; do
+            conda install -p '${{ env.env_prefix }}' "$pkg" \
+              "${channel_args[@]}" --override-channels --quiet -y
+          done
 
       - uses: qiime2/action-library-packaging/build-package@beta
         name: 'Build ${{ github.event.repository.name }}'
