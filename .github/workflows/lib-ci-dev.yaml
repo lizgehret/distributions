@@ -181,17 +181,7 @@ jobs:
 
       - name: 'Set up test environment'
         run: |
-          if [ '${{ needs.setup.outputs.is-paired }}' == 'true' ]; then
-            # Paired- runs: create a full distro env from the seed env so that
-            # all packages in the effective distro are present before make dev
-            # installs the sibling. Without this, the sibling's entry point
-            # causes PluginManager to import the sibling, which may need
-            # packages (e.g. q2-feature-table) that aren't deps of self.
-            conda env create -y -p '${{ env.env_prefix }}' \
-              -f './distro/${{ env.seed_env_path }}'
-          else
-            conda create -y -p ${{ env.env_prefix }}
-          fi
+          conda create -y -p ${{ env.env_prefix }}
           mkdir -p '${{ env.env_prefix }}/etc'
           cat <<EOF > '${{ env.env_prefix }}/etc/activate.sh'
             . "$CONDA/etc/profile.d/conda.sh"
@@ -226,11 +216,11 @@ jobs:
 
       - uses: qiime2/action-library-packaging/install-package@beta
         name: 'Install ${{ github.event.repository.name }}'
-        # Paired- runs skip conda install: the test env is pre-populated from
-        # the seed env via `conda env create`, so the conda solver would reject
-        # installing a dev build whose version string doesn't satisfy other
-        # distro packages' constraints. make dev (below) handles the install
-        # instead, mirroring local development workflow.
+        # Paired- runs skip conda install: the dev build's version string may
+        # not satisfy other distro packages' constraints (e.g. a 2021.8.dev0
+        # build vs. a staged 2026.7 env). The 'Install paired package(s) deps'
+        # step handles seeding the env from the staged channel, and make dev
+        # (below) replaces the staged version with the editable dev build.
         if: needs.setup.outputs.is-paired != 'true'
         with:
           conda-activate: ${{ steps.setup-conda.outputs.conda-activate }}
@@ -238,6 +228,33 @@ jobs:
           package-version: ${{ steps.build-package.outputs.package-version }}
           conda-prefix: ${{ env.env_prefix }}
           channels: ${{ steps.make-cbc.outputs.channels }}
+
+      - name: 'Install paired package(s) deps into test environment'
+        # For Paired- runs, install both the primary package and its sibling(s)
+        # from the staged channel before make dev. This ensures all transitive
+        # deps (e.g. q2-feature-table, qiime2 framework) are present in the
+        # test env regardless of which direction the dependency runs. make dev
+        # (below) then replaces the staged conda versions with editable installs
+        # from the dev branches.
+        if: needs.setup.outputs.is-paired == 'true'
+        shell: bash
+        env:
+          CHANNELS_JSON: ${{ steps.make-cbc.outputs.channels }}
+          PAIRED_REPOS: ${{ needs.setup.outputs.paired-repos }}
+          SELF_PKG: ${{ steps.build-package.outputs.package-name }}
+        run: |
+          ${{ steps.setup-conda.outputs.conda-activate }}
+
+          channel_args=()
+          while IFS= read -r channel; do
+            channel_args+=(-c "$channel")
+          done < <(python -c "import json, os; print('\n'.join(json.loads(os.environ['CHANNELS_JSON'])))")
+
+          mapfile -t sibling_names < <(echo "$PAIRED_REPOS" | jq -r '.[].name')
+
+          conda install -p '${{ env.env_prefix }}' \
+            "$SELF_PKG" "${sibling_names[@]}" \
+            "${channel_args[@]}" --override-channels --quiet -y
 
       - name: 'Install ${{ github.event.repository.name }} into test environment via make dev'
         if: needs.setup.outputs.is-paired == 'true'
