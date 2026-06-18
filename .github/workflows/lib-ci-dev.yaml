@@ -250,7 +250,10 @@ jobs:
             channel_args+=(-c "$channel")
           done < <(python -c "import json, os; print('\n'.join(json.loads(os.environ['CHANNELS_JSON'])))")
 
-          mapfile -t sibling_names < <(echo "$PAIRED_REPOS" | jq -r '.[].name')
+          sibling_names=()
+          while IFS= read -r name; do
+            sibling_names+=("$name")
+          done < <(echo "$PAIRED_REPOS" | jq -r '.[].name')
 
           conda install -p '${{ env.env_prefix }}' \
             "$SELF_PKG" "${sibling_names[@]}" \
@@ -283,7 +286,10 @@ jobs:
           source '${{ env.env_prefix }}/etc/activate.sh'
           conda activate '${{ env.env_prefix }}'
 
-          mapfile -t repos < <(echo "$PAIRED_REPOS" | jq -c '.[]')
+          repos=()
+          while IFS= read -r repo_json; do
+            repos+=("$repo_json")
+          done < <(echo "$PAIRED_REPOS" | jq -c '.[]')
           for repo_json in "${repos[@]}"; do
             name=$(echo "$repo_json" | jq -r '.name')
             repo=$(echo "$repo_json" | jq -r '.repo')
