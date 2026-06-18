@@ -339,3 +339,57 @@ jobs:
           name: ${{ inputs.additional-reports-name }}
           path: ${{ inputs.additional-reports-path }}
           overwrite: true
+
+  comment-reverse-deps:
+    needs: [setup, build-and-test]
+    if: github.event_name == 'pull_request' && needs.setup.outputs.is-paired == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: lizgehret/distributions
+
+      - name: install dependencies
+        run: pip install ghapi==1.0.6
+
+      - name: "get distro info"
+        id: yaml
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
+        with:
+          file: data.yaml
+
+      - name: "find reverse dependencies"
+        id: find-reverse-deps
+        uses: lizgehret/distributions/.github/actions/find-reverse-deps@dev
+        with:
+          packages: ${{ toJSON(fromJSON(steps.yaml.outputs.data).packages) }}
+          self-name: ${{ github.event.repository.name }}
+          paired-repos: ${{ needs.setup.outputs.paired-repos }}
+          effective-distro: ${{ needs.setup.outputs.effective-distro }}
+          active-epoch: ${{ needs.setup.outputs.active-epoch }}
+
+      - name: "post PR comment"
+        uses: actions/github-script@v7
+        env:
+          COMMENT_BODY: ${{ steps.find-reverse-deps.outputs.comment-body }}
+        with:
+          script: |
+            const marker = '<!-- paired-ci-dev-reverse-deps -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            if (comments.some(c => c.body.includes(marker))) {
+              console.log('Reverse-deps comment already exists; skipping.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: process.env.COMMENT_BODY,
+            });
