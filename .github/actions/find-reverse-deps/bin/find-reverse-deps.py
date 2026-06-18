@@ -105,7 +105,7 @@ def build_comment(self_name, paired_repos, effective_distro, reverse_deps):
         '_This comment is automatically generated once after tests pass._',
     ]
 
-    return '\n'.join(lines)
+    return '\n'.join(lines) + '\n'
 
 
 def main(packages, self_name, paired_repos, effective_distro, active_epoch):
