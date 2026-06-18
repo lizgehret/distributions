@@ -288,10 +288,26 @@ jobs:
 
       - uses: qiime2/action-library-packaging/test-package@beta
         name: 'Test ${{ github.event.repository.name }}'
+        # Paired- runs skip test-package@beta: it does a fresh conda install of
+        # the built package's `requires`, which overwrites the make dev installs
+        # (the paired dev versions) with staged conda packages and re-introduces
+        # the type/API conflicts that the Paired branches exist to resolve.
+        if: needs.setup.outputs.is-paired != 'true'
         with:
           conda-activate: source ${{ env.env_prefix }}/etc/activate.sh
           package-path: ${{ env.built_channel_path }}/${{ steps.build-package.outputs.conda-subdir }}/${{ steps.build-package.outputs.package-filename }}
           channels: ${{ steps.make-cbc.outputs.channels }}
+
+      - name: 'Test ${{ github.event.repository.name }} (paired dev environment)'
+        if: needs.setup.outputs.is-paired == 'true'
+        shell: bash
+        run: |
+          source '${{ env.env_prefix }}/etc/activate.sh'
+          conda activate '${{ env.env_prefix }}'
+          # derive the Python module name from the package name (- -> _)
+          pkg_module='${{ steps.build-package.outputs.package-name }}'
+          pkg_module="${pkg_module//-/_}"
+          python -m pytest --pyargs "$pkg_module"
 
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.upload_reports && inputs.additional-reports-path != '' }}
