@@ -68,7 +68,7 @@ def build_comment(self_name, paired_repos, effective_distro, reverse_deps):
         f'**Effective distribution:** `{effective_distro}`',
         '',
         f'The following plugins in the `{effective_distro}` distribution '
-        f'(`primary_distro`) list `{self_name}` as a conda run-dependency. '
+        f'list `{self_name}` as a conda run-dependency. '
         f'Please review them to confirm no additional plugins will have test '
         f'failures due to an API change.',
         '',
