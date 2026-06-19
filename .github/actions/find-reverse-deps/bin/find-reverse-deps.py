@@ -57,8 +57,8 @@ def build_pkg_deps(channel_base):
 
 def build_comment(self_name, paired_repos, effective_distro, reverse_deps):
     """Return the formatted markdown comment body string."""
-    paired_names = [self_name] + [p['name'] for p in paired_repos]
-    paired_display = ', '.join(f'`{n}`' for n in paired_names)
+    sibling_names = [p['name'] for p in paired_repos]
+    paired_display = ', '.join(f'`{n}`' for n in [self_name] + sibling_names)
 
     lines = [
         '<!-- paired-ci-dev-reverse-deps -->',
@@ -68,37 +68,29 @@ def build_comment(self_name, paired_repos, effective_distro, reverse_deps):
         f'**Effective distribution:** `{effective_distro}`',
         '',
         f'The following plugins in the `{effective_distro}` distribution '
-        f'(`primary_distro`) list one or more of the above packages as a '
-        f'conda run-dependency. Please review them to confirm no additional '
-        f'plugins will have test failures due to an API change.',
+        f'(`primary_distro`) list `{self_name}` as a conda run-dependency. '
+        f'Please review them to confirm no additional plugins will have test '
+        f'failures due to an API change.',
         '',
     ]
 
-    any_found = False
-    for paired_name in paired_names:
-        dependents = reverse_deps.get(paired_name, [])
-        lines.append(f'### Depends on `{paired_name}`')
-        if dependents:
-            any_found = True
-            for dep in sorted(dependents, key=lambda d: d['name']):
-                name = dep['name']
-                repo = dep.get('repo', '')
-                if repo:
-                    lines.append(
-                        f'- `{name}` — [{repo}](https://github.com/{repo})'
-                    )
-                else:
-                    lines.append(f'- `{name}`')
-        else:
-            lines.append('_None found._')
-        lines.append('')
-
-    if not any_found:
+    dependents = reverse_deps.get(self_name, [])
+    if dependents:
+        for dep in sorted(dependents, key=lambda d: d['name']):
+            name = dep['name']
+            repo = dep.get('repo', '')
+            if repo:
+                lines.append(
+                    f'- `{name}` — [{repo}](https://github.com/{repo})'
+                )
+            else:
+                lines.append(f'- `{name}`')
+    else:
         lines.append(
-            f'_No reverse dependencies found in the `{effective_distro}` '
-            f'distribution._'
+            f'_No reverse dependencies found for `{self_name}` in the '
+            f'`{effective_distro}` distribution._'
         )
-        lines.append('')
+    lines.append('')
 
     lines += [
         '---',
@@ -126,8 +118,7 @@ def main(packages, self_name, paired_repos, effective_distro, active_epoch):
 
     print(
         f'Checking {len(candidates)} candidate package(s) in '
-        f"'{effective_distro}' for reverse deps on: "
-        + ', '.join(sorted(paired_names))
+        f"'{effective_distro}' for reverse deps on: {self_name}"
     )
 
     channel_base = f'{PACKAGES_BASE}/{active_epoch}/{effective_distro}/staged'
@@ -139,14 +130,14 @@ def main(packages, self_name, paired_repos, effective_distro, active_epoch):
             'Reverse dependency check skipped.'
         )
 
-    reverse_deps = {name: [] for name in paired_names}
+    # Only search reverse deps for self; the sibling's PR will carry its own.
+    reverse_deps = {self_name: []}
     for candidate in candidates:
         name = candidate['name']
         deps = pkg_deps.get(name, set())
-        for paired_name in paired_names:
-            if paired_name in deps:
-                reverse_deps[paired_name].append(candidate)
-                print(f'  {name} depends on {paired_name}')
+        if self_name in deps:
+            reverse_deps[self_name].append(candidate)
+            print(f'  {name} depends on {self_name}')
 
     comment_body = build_comment(
         self_name=self_name,
