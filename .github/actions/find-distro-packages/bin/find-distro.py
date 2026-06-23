@@ -7,7 +7,7 @@ from alp.common import ActionAdapter
 
 def get_library_packages():
     response = urllib.request.urlopen(
-        'https://raw.githubusercontent.com/qiime2/distributions/dev/data.yaml')
+        'https://raw.githubusercontent.com/lizgehret/distributions/dev/data.yaml')
     return {x['name']: x['repo'] for x in yaml.safe_load(response)['packages']}
 
 
