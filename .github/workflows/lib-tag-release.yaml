@@ -5,7 +5,7 @@
 #     branches: ["Release-*"]
 # jobs:
 #   tag:
-#     uses: qiime2/distributions/.github/workflows/lib-tag-release.yaml@dev
+#     uses: lizgehret/distributions/.github/workflows/lib-tag-release.yaml@dev
 
 on:
   workflow_call: {}

@@ -7,7 +7,7 @@
 #     branches: ["dev"]
 # jobs:
 #   ci:
-#     uses: qiime2/distributions/.github/workflows/lib-community-ci.yaml@dev
+#     uses: lizgehret/distributions/.github/workflows/lib-community-ci.yaml@dev
 #     with:
 #       github-repo: q2-vizard
 #       env-file-name: 2024.5-vizard-environment.yml

@@ -12,12 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
           sparse-checkout: |
             data.yaml
       - name: "get distro info"
         id: yaml
-        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
 

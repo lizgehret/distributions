@@ -67,7 +67,7 @@ jobs:
           mkdir -p '${{ env.distributions_repo }}/${{ inputs.epoch }}/${{ inputs.distro }}/released/'
 
       - name: update seed environments (staged)
-        uses: qiime2/action-library-packaging/patch-env@beta
+        uses: lizgehret/action-library-packaging/patch-env@beta
         with:
           environment-file: ${{ env.distributions_repo }}/${{ inputs.epoch }}/${{ inputs.distro }}/staged/${{ inputs.seed_environment_file }}
           mask-environment-file: ${{ env.seed_environment_path }}/${{ inputs.seed_environment_file }}
@@ -130,7 +130,7 @@ jobs:
           author_email: q2d2.noreply@gmail.com
           cwd: ${{ env.distributions_repo }}
 
-      - uses: qiime2/action-library-packaging/upload-channel@beta
+      - uses: lizgehret/action-library-packaging/upload-channel@beta
         if: ${{ !github.event.pull_request.draft }}
         with:
           distro: ${{ inputs.distro }}

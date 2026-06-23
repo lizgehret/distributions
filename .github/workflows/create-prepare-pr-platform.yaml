@@ -33,7 +33,7 @@ jobs:
 
       - name: "get distro info"
         id: yaml
-        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
 
@@ -92,7 +92,7 @@ jobs:
             gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              /repos/qiime2/distributions/actions/runs?head_sha=${{ needs.create-pr.outputs.sha }} \
+              /repos/lizgehret/distributions/actions/runs?head_sha=${{ needs.create-pr.outputs.sha }} \
               -q '.workflow_runs[] | select(.name == "${{ inputs.trial_workflow_name }}").id' | head -n 1
           ) >> "$GITHUB_OUTPUT"
 
@@ -118,7 +118,7 @@ jobs:
             --method PUT \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/qiime2/distributions/pulls/${{ needs.create-pr.outputs.pr }}/merge
+            /repos/lizgehret/distributions/pulls/${{ needs.create-pr.outputs.pr }}/merge
           )
           MERGED=$(
             python3 -c 'import json, sys; print(str(json.load(sys.stdin).get("merged", False)).lower())' <<< "$GH_RESPONSE"
@@ -193,4 +193,4 @@ jobs:
             --method PUT \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/qiime2/distributions/pulls/${{ needs.update-latest-envs.outputs.env-pr }}/merge
+            /repos/lizgehret/distributions/pulls/${{ needs.update-latest-envs.outputs.env-pr }}/merge

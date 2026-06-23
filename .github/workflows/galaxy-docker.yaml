@@ -17,7 +17,7 @@ jobs:
     name: Build and push image
     runs-on: ubuntu-latest
     steps:
-      - uses: qiime2/action-library-packaging/clean-disk@beta
+      - uses: lizgehret/action-library-packaging/clean-disk@beta
         name: "Clean disk on linux"
 
       # Do we pull prebuilt tools or do we pull q2galaxy and build?

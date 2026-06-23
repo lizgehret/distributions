@@ -152,12 +152,12 @@ jobs:
           key: "(Conda Package) ${{ matrix.package.package_name }}=${{ matrix.package.package_version }} (${{ inputs.platform_label }}) (build=${{ matrix.package.build_number }}) (${{ hashFiles(format('{0}/{1}', env.seed_environment_path, inputs.seed_environment_file)) }})"
           path: ${{ env.rebuilt_channel_path }}/*/${{ matrix.package.package_name }}-${{ matrix.package.package_version }}-*
 
-      - uses: qiime2/action-library-packaging/environment@beta
+      - uses: lizgehret/action-library-packaging/environment@beta
         if: ${{ !steps.fetch-build.outputs.cache-hit }}
         name: 'Set up build environment'
         id: setup-conda
 
-      - uses: qiime2/action-library-packaging/make-conda-config@beta
+      - uses: lizgehret/action-library-packaging/make-conda-config@beta
         if: ${{ !steps.fetch-build.outputs.cache-hit }}
         name: 'Create conda build config'
         id: make-cbc
@@ -168,7 +168,7 @@ jobs:
           channels: '["${{ env.rebuilt_channel_path }}", "${{ env.patched_channel_path }}"]'
           skip-first-channel: true
 
-      - uses: qiime2/action-library-packaging/build-package@beta
+      - uses: lizgehret/action-library-packaging/build-package@beta
         if: ${{ !steps.fetch-build.outputs.cache-hit }}
         name: 'Build ${{ matrix.package.repo }}'
         id: build-package
@@ -250,7 +250,7 @@ jobs:
       - name: install conda-build
         run: conda install -c conda-forge -q conda-build
 
-      - uses: qiime2/action-library-packaging/environment@beta
+      - uses: lizgehret/action-library-packaging/environment@beta
         name: 'Set up build environment'
         id: setup-conda
 
@@ -286,7 +286,7 @@ jobs:
           name: ${{ inputs.seed-environment-key }}
           path: ${{ env.seed_environment_path }}
 
-      - uses: qiime2/action-library-packaging/patch-env@beta
+      - uses: lizgehret/action-library-packaging/patch-env@beta
         name: 'Update seed environment file with new versions'
         with:
           environment-file: ${{ env.seed_environment_path }}/${{ inputs.seed_environment_file }}
@@ -315,7 +315,7 @@ jobs:
 
       - name: 'Patch base channel'
         if: ${{ inputs.is-rebuild != 'true' }}
-        uses: qiime2/action-library-packaging/patch-repodata@beta
+        uses: lizgehret/action-library-packaging/patch-repodata@beta
         with:
           conda-activate: ${{ steps.setup-conda.outputs.conda-activate }}
           channel: ${{ env.patched_channel_path }}

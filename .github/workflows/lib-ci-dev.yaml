@@ -7,7 +7,7 @@
 #     branches: ["dev"]
 # jobs:
 #   ci:
-#     uses: qiime2/distributions/.github/workflows/lib-ci-dev.yaml@dev
+#     uses: lizgehret/distributions/.github/workflows/lib-ci-dev.yaml@dev
 #     with:
 #       distro: core
 
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
 
       - name: "install ghapi"
         run: |
@@ -70,7 +70,7 @@ jobs:
 
       - name: "get distro info"
         id: yaml
-        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
 
@@ -91,7 +91,7 @@ jobs:
       - name: "find paired branch & resolve effective distro"
         id: find-paired
         if: steps.detect-paired.outputs.is-paired == 'true'
-        uses: qiime2/distributions/.github/actions/find-paired-branch@dev
+        uses: lizgehret/distributions/.github/actions/find-paired-branch@dev
         with:
           packages: ${{ toJSON(fromJSON(steps.yaml.outputs.data).packages) }}
           self-repo: ${{ github.repository }}
@@ -110,7 +110,7 @@ jobs:
 
       - name: detect supported platform environments
         id: platform-support
-        uses: qiime2/distributions/.github/actions/detect-platforms@dev
+        uses: lizgehret/distributions/.github/actions/detect-platforms@dev
         with:
           epoch: ${{ fromJSON(steps.yaml.outputs.data).active_epoch }}
           distro: ${{ steps.effective-distro.outputs.effective-distro }}
@@ -129,7 +129,7 @@ jobs:
     # only run this on PRs created on or after 3 June 2026 (9am zurich time)
     - name: validate PR template
       if: ${{ inputs.validate-pr-template && github.event_name == 'pull_request' && github.event.pull_request.created_at >= '2026-06-03T07:00:00.000Z' }}
-      uses: qiime2/distributions/.github/actions/validate-pr-template@dev
+      uses: lizgehret/distributions/.github/actions/validate-pr-template@dev
       with:
         gh-token: ${{ github.token }}
         gh-repo: ${{ github.repository }}
@@ -171,11 +171,11 @@ jobs:
 
       - uses: actions/checkout@v3
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
           path: ./distro
           sparse-checkout: ${{ env.seed_env_path }}
 
-      - uses: qiime2/action-library-packaging/environment@beta
+      - uses: lizgehret/action-library-packaging/environment@beta
         name: 'Set up build environment'
         id: setup-conda
 
@@ -195,7 +195,7 @@ jobs:
           mkdir -p ${{ env.built_channel_path }}
           python -m conda_index ${{ env.built_channel_path }}
 
-      - uses: qiime2/action-library-packaging/make-conda-config@beta
+      - uses: lizgehret/action-library-packaging/make-conda-config@beta
         name: 'Create conda build config'
         id: make-cbc
         with:
@@ -204,7 +204,7 @@ jobs:
           conda-build-config: 'conda_build_config.yml'
           channels: '["${{ env.built_channel_path }}"]'
 
-      - uses: qiime2/action-library-packaging/build-package@beta
+      - uses: lizgehret/action-library-packaging/build-package@beta
         name: 'Build ${{ github.event.repository.name }}'
         id: build-package
         with:
@@ -221,7 +221,7 @@ jobs:
         # The 'Install paired package(s) deps' step handles seeding the env
         # from the staged channel, and make dev replaces the staged version
         # with the editable dev build.
-      - uses: qiime2/action-library-packaging/install-package@beta
+      - uses: lizgehret/action-library-packaging/install-package@beta
         name: 'Install ${{ github.event.repository.name }}'
         if: needs.setup.outputs.is-paired != 'true'
         with:
@@ -317,7 +317,7 @@ jobs:
         # `requires` overwriting the make dev installs (paired dev versions)
         # with staged conda packages and re-introduces
         # the type/API conflicts that the Paired branches exist to resolve.
-      - uses: qiime2/action-library-packaging/test-package@beta
+      - uses: lizgehret/action-library-packaging/test-package@beta
         name: 'Test ${{ github.event.repository.name }}'
         if: needs.setup.outputs.is-paired != 'true'
         with:
@@ -354,20 +354,20 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: qiime2/distributions
+          repository: lizgehret/distributions
 
       - name: install dependencies
         run: pip install ghapi==1.0.6
 
       - name: "get distro info"
         id: yaml
-        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        uses: lizgehret/distributions/.github/actions/read-yaml@dev
         with:
           file: data.yaml
 
       - name: "find reverse dependencies"
         id: find-reverse-deps
-        uses: qiime2/distributions/.github/actions/find-reverse-deps@dev
+        uses: lizgehret/distributions/.github/actions/find-reverse-deps@dev
         with:
           packages: ${{ toJSON(fromJSON(steps.yaml.outputs.data).packages) }}
           self-name: ${{ github.event.repository.name }}

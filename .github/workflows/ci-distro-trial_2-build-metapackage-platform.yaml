@@ -56,7 +56,7 @@ jobs:
     outputs:
       channels: ${{ steps.build-meta.outputs.channels }}
     steps:
-      - uses: qiime2/action-library-packaging/clean-disk@beta
+      - uses: lizgehret/action-library-packaging/clean-disk@beta
         if: ${{ runner.os == 'Linux' }}
         name: "Clean disk on linux"
 
@@ -78,11 +78,11 @@ jobs:
           name: ${{ inputs.rebuilt-channel-key }}
           path: ${{ env.rebuilt_channel_path }}
 
-      - uses: qiime2/action-library-packaging/environment@beta
+      - uses: lizgehret/action-library-packaging/environment@beta
         id: build-env
         name: "Set up build env"
 
-      - uses: qiime2/action-library-packaging/build-metapackage@beta
+      - uses: lizgehret/action-library-packaging/build-metapackage@beta
         name: "Build metapackage"
         id: build-meta
         with:
@@ -105,7 +105,7 @@ jobs:
       fail-fast: false
     runs-on: ${{ inputs.runner_label }}
     steps:
-      - uses: qiime2/action-library-packaging/clean-disk@beta
+      - uses: lizgehret/action-library-packaging/clean-disk@beta
         if: ${{ runner.os == 'Linux' }}
         name: "Clean disk on linux"
 
@@ -128,7 +128,7 @@ jobs:
           path: ${{ env.rebuilt_channel_path }}
 
       - name: set up conda
-        uses: qiime2/action-library-packaging/environment@beta
+        uses: lizgehret/action-library-packaging/environment@beta
         id: setup-conda
 
       - name: reindex rebuilt channel
@@ -139,7 +139,7 @@ jobs:
 
       - name: Install metapackage, create env file, and cache
         id: cache-env
-        uses: qiime2/action-library-packaging/create-env@beta
+        uses: lizgehret/action-library-packaging/create-env@beta
         with:
           conda-prefix: ${{ env.environment_prefix }}
           environment-file: ${{ inputs.distro-name }}-${{ inputs.platform_label }}-conda.yml
@@ -178,7 +178,7 @@ jobs:
       - name: install conda-build
         run: conda install -c conda-forge -q conda-build
 
-      - uses: qiime2/action-library-packaging/environment@beta
+      - uses: lizgehret/action-library-packaging/environment@beta
         name: 'Set up build environment'
         id: setup-conda
 
