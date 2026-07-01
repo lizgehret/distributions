@@ -1,0 +1,126 @@
+name: ci-collate-changelog
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: >-
+          Release tag to generate the changelog for (e.g. 2026.10.0). Defaults
+          to <active_epoch>.0 from data.yaml.
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: >-
+          Release tag to generate the changelog for (e.g. 2026.10.0). Leave
+          blank to derive from data.yaml active_epoch.
+        required: false
+        type: string
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      release-tag: ${{ steps.resolve.outputs.release_tag }}
+      plugin-matrix: ${{ steps.yaml.outputs.data }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: lizgehret/distributions
+          sparse-checkout: |
+            data.yaml
+
+      - name: "get distro info"
+        id: yaml
+        uses: qiime2/distributions/.github/actions/read-yaml@dev
+        with:
+          file: data.yaml
+
+      - name: "resolve release tag"
+        id: resolve
+        shell: bash
+        run: |
+          RELEASE_TAG="${{ inputs.release_tag }}"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="${{ fromJSON(steps.yaml.outputs.data).active_epoch }}.0"
+          fi
+          echo "Resolved release tag: $RELEASE_TAG"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  per-repo:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        packages: ${{ fromJSON(needs.setup.outputs.plugin-matrix).packages }}
+    steps:
+      # checkout distributions (this repo) to get the categorizer script
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts/collate_changelog.py
+          sparse-checkout-cone-mode: false
+
+      - name: "set up python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: "install dependencies"
+        run: pip install requests
+
+      - name: "generate changelog fragment"
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT }}
+        run: |
+          mkdir -p fragments
+          python .github/scripts/collate_changelog.py \
+            --repo "${{ matrix.packages.repo }}" \
+            --name "${{ matrix.packages.name }}" \
+            --release-tag "${{ needs.setup.outputs.release-tag }}" \
+            --output "fragments/${{ matrix.packages.name }}.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: changelog-fragment-${{ matrix.packages.name }}
+          path: fragments/${{ matrix.packages.name }}.md
+          retention-days: 7
+
+  collate:
+    needs: [setup, per-repo]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "download fragments"
+        uses: actions/download-artifact@v4
+        with:
+          pattern: changelog-fragment-*
+          path: fragments
+          merge-multiple: true
+
+      - name: "collate fragments (alphabetical)"
+        shell: bash
+        run: |
+          RELEASE_TAG="${{ needs.setup.outputs.release-tag }}"
+          RELEASE_NAME="${RELEASE_TAG%.0}"
+          OUT="changelog-${RELEASE_NAME}.md"
+
+          {
+            echo "# 📋 ${RELEASE_NAME} Collated Changelog"
+            echo ""
+            for f in $(ls fragments/*.md | sort); do
+              cat "$f"
+              echo ""
+            done
+          } > "$OUT"
+
+          # surface in the run (both standalone and when called from join-release)
+          cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: "upload collated changelog"
+        uses: actions/upload-artifact@v4
+        with:
+          name: collated-changelog
+          path: ${{ env.OUT }}
+          retention-days: 30
