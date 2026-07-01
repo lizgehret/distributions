@@ -54,6 +54,14 @@ CATEGORY_ORDER = [
     "Uncategorized",
 ]
 
+# emoji appended to each category sub-header (Uncategorized has none)
+CATEGORY_EMOJI = {
+    "Breaking Changes": "💥",
+    "New Features!": "🚀",
+    "Bug Fixes": "🪲",
+    "Maintenance": "⚙️",
+}
+
 # release-machinery commits created by the join-release action; these carry an
 # empty "[skip ci]" payload and are excluded from the changelog entirely.
 SKIP_PREFIXES = {"REL", "DEV", "LANG", "PREP"}
@@ -115,7 +123,7 @@ def find_previous_tag(stable_tags, head_version):
 
 
 def get_commits(repo, base, head, token):
-    """Return a list of (short_sha, subject, html_url) between base and head.
+    """Return a list of (short_sha, subject, html_url, login, author_url).
 
     If ``base`` is None (no prior release tag exists) all commits reachable from
     ``head`` are returned instead.
@@ -147,19 +155,24 @@ def get_commits(repo, base, head, token):
     commits = []
     for c in raw:
         subject = c["commit"]["message"].splitlines()[0].strip()
-        commits.append((c["sha"][:7], subject, c["html_url"]))
+        # c["author"] is the linked GitHub account (may be null for commits not
+        # associated with a GitHub user); fall back to no author link.
+        author = c.get("author") or {}
+        login = author.get("login")
+        author_url = author.get("html_url")
+        commits.append((c["sha"][:7], subject, c["html_url"], login, author_url))
     return commits
 
 
 def categorize(commits):
     buckets = {cat: [] for cat in CATEGORY_ORDER}
-    for sha, subject, url in commits:
+    for sha, subject, url, login, author_url in commits:
         m = PREFIX_RE.match(subject)
         prefix = m.group(1) if m else None
         if prefix in SKIP_PREFIXES:
             continue
         category = PREFIX_CATEGORY.get(prefix, "Uncategorized")
-        buckets[category].append((sha, subject, url))
+        buckets[category].append((sha, subject, url, login, author_url))
     return buckets
 
 
@@ -172,9 +185,14 @@ def render(name, base, head, buckets):
         if not entries:
             continue
         any_content = True
-        lines.append(f"### {cat}")
-        for sha, subject, url in entries:
-            lines.append(f"- {subject} ([`{sha}`]({url}))")
+        emoji = CATEGORY_EMOJI.get(cat)
+        lines.append(f"#### {cat} {emoji}" if emoji else f"#### {cat}")
+        for sha, subject, url, login, author_url in entries:
+            entry = f"- {subject} ([`{sha}`]({url})"
+            if login and author_url:
+                entry += f" by [{login}]({author_url})"
+            entry += ")"
+            lines.append(entry)
         lines.append("")
     if not any_content:
         lines.append("_No changes in this release._")
