@@ -109,6 +109,8 @@ jobs:
             echo "# 📋 ${RELEASE_NAME} Collated Changelog"
             echo ""
             for f in $(ls fragments/*.md | sort); do
+              # skip empty fragments: plugins with no changes this cycle
+              [ -s "$f" ] || continue
               cat "$f"
               echo ""
             done

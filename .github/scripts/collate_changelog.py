@@ -41,9 +41,11 @@ join-release action are skipped entirely.
 
 API = "https://api.github.com"
 
-# Ordered category structure. Each category has a display name, an emoji, and an
-# ordered list of (subsection_name, prefix) pairs. A subsection_name of None
-# means the commits are listed directly under the category with no subheader.
+# Ordered category structure
+# Each category has a display name, an emoji, and an ordered list of
+# (subsection_name, prefix) pairs.
+# A subsection_name of None means the commits are listed directly under the
+# category with no subheader.
 # Categories, subsections, and the Uncategorized bucket are only rendered when
 # they contain matching commits.
 CATEGORY_STRUCTURE = [
@@ -135,12 +137,12 @@ def find_previous_tag(stable_tags, head_version):
 def get_commits(repo, base, head, token):
     """Return a list of (short_sha, subject, html_url, login, author_url).
 
-    If ``base`` is None (no prior release tag exists) all commits reachable from
-    ``head`` are returned instead.
+    If ``base`` is None (no prior release tag exists) all commits reachable from ``head`` are returned instead.
 
-    NOTE: the compare API returns at most 250 commits per response; releases that
-    span more than 250 commits would be truncated. This has not been an issue for
-    per-plugin release cycles, but is a known limitation.
+    NOTE: the compare API returns at most 250 commits per response;
+    releases that span more than 250 commits would be truncated.
+    This has not been an issue for per-plugin release cycles,
+    but is a known limitation.
     """
     if base:
         resp = gh_get(f"{API}/repos/{repo}/compare/{base}...{head}", token)
@@ -246,8 +248,9 @@ def render(name, base, head, by_prefix, uncategorized):
         lines.append("")
 
     if not any_content:
-        lines.append("_No changes in this release._")
-        lines.append("")
+        # plugin had no changes this cycle -> emit nothing so it can be omitted
+        # from the collated changelog entirely
+        return ""
     return "\n".join(lines)
 
 
@@ -279,11 +282,14 @@ def main():
     fragment = render(args.name, base, args.release_tag, by_prefix, uncategorized)
 
     with open(args.output, "w") as fh:
-        fh.write(fragment)
-        if not fragment.endswith("\n"):
-            fh.write("\n")
+        # an empty fragment (no changes this cycle) leaves a 0-byte file, which
+        # the collate step skips
+        if fragment:
+            fh.write(fragment)
+            if not fragment.endswith("\n"):
+                fh.write("\n")
 
-    print(fragment)
+    print(fragment or f"{args.name}: no changes this cycle")
 
 
 if __name__ == "__main__":
