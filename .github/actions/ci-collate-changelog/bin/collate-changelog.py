@@ -1,19 +1,13 @@
-#!/usr/bin/env python3
-
-import argparse
-import os
-import re
-import sys
-
-import requests
+#!/usr/bin/env python
 
 """Generate a per-repo changelog fragment for the collated release changelog.
 
 For a single repository, this pulls all commits between the previous stable
 release tag and the current release tag via the GitHub compare API, categorizes
-them by commit-message prefix, and writes a Markdown fragment. The reusable
-``ci-collate-changelog`` workflow runs this once per plugin (matrix) and then
-stitches the fragments into one alphabetically-sorted changelog.
+them by commit-message prefix, and writes a Markdown fragment to the ``output``
+path. The ``ci-collate-changelog`` workflow runs this action once per plugin
+(matrix) and then stitches the fragments into one alphabetically-sorted
+changelog, skipping empty fragments (plugins with no changes this cycle).
 
 Category / subsection -> prefix mapping (see CATEGORY_STRUCTURE below):
 
@@ -36,16 +30,25 @@ message, sha link, and author remain). Any commit whose subject does not start
 with a recognized prefix (matched as ``PREFIX:`` exactly, including the colon)
 lands in an "Uncategorized" section for manual review, with its subject left
 intact. Release-machinery commits (REL:/DEV:/LANG:/PREP:) created by the
-join-release action are skipped entirely.
+join-release action are skipped entirely. A repository with no remaining
+changes yields an empty fragment.
+
+A GitHub token is read from the GH_TOKEN (or GITHUB_TOKEN) environment variable;
+it is intentionally NOT an action input, since inputs are echoed to the log.
 """
+import json
+import os
+import re
+import urllib.parse
+import urllib.request
+
+from alp.common import ActionAdapter
 
 API = "https://api.github.com"
 
-# Ordered category structure
-# Each category has a display name, an emoji, and an ordered list of
-# (subsection_name, prefix) pairs.
-# A subsection_name of None means the commits are listed directly under the
-# category with no subheader.
+# Ordered category structure. Each category has a display name, an emoji, and an
+# ordered list of (subsection_name, prefix) pairs. A subsection_name of None
+# means the commits are listed directly under the category with no subheader.
 # Categories, subsections, and the Uncategorized bucket are only rendered when
 # they contain matching commits.
 CATEGORY_STRUCTURE = [
@@ -85,12 +88,14 @@ VERSION_RE = re.compile(r"^(\d{4})\.(\d+)\.(\d+)$")
 
 
 def gh_get(url, token, params=None):
-    headers = {"Accept": "application/vnd.github+json"}
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url)
+    request.add_header("Accept", "application/vnd.github+json")
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-    resp = requests.get(url, headers=headers, params=params)
-    resp.raise_for_status()
-    return resp
+        request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request) as response:
+        return json.load(response)
 
 
 def parse_version(tag):
@@ -105,12 +110,11 @@ def get_stable_tags(repo, token):
     tags = []
     page = 1
     while True:
-        resp = gh_get(
+        batch = gh_get(
             f"{API}/repos/{repo}/tags",
             token,
             params={"per_page": 100, "page": page},
         )
-        batch = resp.json()
         if not batch:
             break
         for t in batch:
@@ -137,26 +141,25 @@ def find_previous_tag(stable_tags, head_version):
 def get_commits(repo, base, head, token):
     """Return a list of (short_sha, subject, html_url, login, author_url).
 
-    If ``base`` is None (no prior release tag exists) all commits reachable from ``head`` are returned instead.
+    If ``base`` is None (no prior release tag exists) all commits reachable from
+    ``head`` are returned instead.
 
-    NOTE: the compare API returns at most 250 commits per response;
-    releases that span more than 250 commits would be truncated.
-    This has not been an issue for per-plugin release cycles,
-    but is a known limitation.
+    NOTE: the compare API returns at most 250 commits per response; releases that
+    span more than 250 commits would be truncated. This has not been an issue for
+    per-plugin release cycles, but is a known limitation.
     """
     if base:
-        resp = gh_get(f"{API}/repos/{repo}/compare/{base}...{head}", token)
-        raw = resp.json().get("commits", [])
+        raw = gh_get(f"{API}/repos/{repo}/compare/{base}...{head}", token)
+        raw = raw.get("commits", [])
     else:
         raw = []
         page = 1
         while True:
-            resp = gh_get(
+            batch = gh_get(
                 f"{API}/repos/{repo}/commits",
                 token,
                 params={"sha": head, "per_page": 100, "page": page},
             )
-            batch = resp.json()
             if not batch:
                 break
             raw.extend(batch)
@@ -254,34 +257,26 @@ def render(name, base, head, by_prefix, uncategorized):
     return "\n".join(lines)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--repo", required=True, help="owner/name")
-    parser.add_argument("--name", required=True, help="plugin display name")
-    parser.add_argument("--release-tag", required=True, help="e.g. 2026.10.0")
-    parser.add_argument("--output", required=True, help="fragment output path")
-    args = parser.parse_args()
-
+def main(repo, name, release_tag, output):
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
-    head_version = parse_version(args.release_tag)
+    head_version = parse_version(release_tag)
     if head_version is None:
         print(
-            f"::warning::release tag '{args.release_tag}' is not X.Y.Z; "
-            f"cannot resolve a previous tag for {args.repo}, using full history",
-            file=sys.stderr,
+            f"::warning::release tag '{release_tag}' is not X.Y.Z; "
+            f"cannot resolve a previous tag for {repo}, using full history"
         )
 
-    stable_tags = get_stable_tags(args.repo, token)
+    stable_tags = get_stable_tags(repo, token)
     base = find_previous_tag(stable_tags, head_version) if head_version else None
 
-    print(f"{args.name}: comparing {base or '<initial>'}...{args.release_tag}")
+    print(f"{name}: comparing {base or '<initial>'}...{release_tag}")
 
-    commits = get_commits(args.repo, base, args.release_tag, token)
+    commits = get_commits(repo, base, release_tag, token)
     by_prefix, uncategorized = categorize(commits)
-    fragment = render(args.name, base, args.release_tag, by_prefix, uncategorized)
+    fragment = render(name, base, release_tag, by_prefix, uncategorized)
 
-    with open(args.output, "w") as fh:
+    with open(output, "w") as fh:
         # an empty fragment (no changes this cycle) leaves a 0-byte file, which
         # the collate step skips
         if fragment:
@@ -289,8 +284,10 @@ def main():
             if not fragment.endswith("\n"):
                 fh.write("\n")
 
-    print(fragment or f"{args.name}: no changes this cycle")
+    print(fragment or f"{name}: no changes this cycle")
+
+    return dict(has_changes="true" if fragment else "false")
 
 
 if __name__ == "__main__":
-    main()
+    ActionAdapter(main)

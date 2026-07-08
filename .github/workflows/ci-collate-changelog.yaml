@@ -55,31 +55,23 @@ jobs:
       matrix:
         packages: ${{ fromJSON(needs.setup.outputs.plugin-matrix).packages }}
     steps:
-      # checkout distributions (this repo) to get the categorizer script
+      # checkout distributions (this repo) so the local action is available
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            .github/scripts/collate_changelog.py
-          sparse-checkout-cone-mode: false
 
-      - name: "set up python"
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: "install dependencies"
-        run: pip install requests
+      - name: "ensure fragments directory"
+        shell: bash
+        run: mkdir -p fragments
 
       - name: "generate changelog fragment"
+        id: fragment
+        uses: ./.github/actions/ci-collate-changelog
         env:
           GH_TOKEN: ${{ secrets.BOT_PAT }}
-        run: |
-          mkdir -p fragments
-          python .github/scripts/collate_changelog.py \
-            --repo "${{ matrix.packages.repo }}" \
-            --name "${{ matrix.packages.name }}" \
-            --release-tag "${{ needs.setup.outputs.release-tag }}" \
-            --output "fragments/${{ matrix.packages.name }}.md"
+        with:
+          repo: ${{ matrix.packages.repo }}
+          name: ${{ matrix.packages.name }}
+          release-tag: ${{ needs.setup.outputs.release-tag }}
+          output: fragments/${{ matrix.packages.name }}.md
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,27 @@
+name: 'Generate a plugin changelog fragment'
+inputs:
+  repo:
+    required: true
+  name:
+    required: true
+  release-tag:
+    required: true
+  output:
+    required: true
+outputs:
+  has-changes:
+    value: ${{ steps.collate-changelog.outputs.has-changes }}
+runs:
+  using: composite
+  steps:
+    - id: 'setup-path'
+      shell: bash
+      run: echo "${{ github.action_path }}/bin/" >> $GITHUB_PATH
+    - id: 'collate-changelog'
+      shell: bash
+      env:
+        PYTHONPATH: "${{ github.action_path }}/../src/"
+      run: |
+        cat <<EOF | collate-changelog.py
+        ${{ toJSON(inputs) }}
+        EOF
