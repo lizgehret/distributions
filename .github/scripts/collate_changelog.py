@@ -15,51 +15,61 @@ them by commit-message prefix, and writes a Markdown fragment. The reusable
 ``ci-collate-changelog`` workflow runs this once per plugin (matrix) and then
 stitches the fragments into one alphabetically-sorted changelog.
 
-Prefix -> category mapping (see PREFIX_CATEGORY below):
+Category / subsection -> prefix mapping (see CATEGORY_STRUCTURE below):
 
-    Breaking Changes : API, DEPR
-    New Features!    : NEW, ENH
-    Bug Fixes        : BUG
-    Maintenance      : MAINT, TEST, REF, CI, PIN, DOC
+    Breaking Changes 💥
+        API Changes           : API
+        Deprecations          : DEPR
+    New and Improved! 🚀
+        New Features          : NEW
+        Improvements          : IMP
+    Bug Fixes 🪲              : BUG   (no subsection)
+    Maintenance ⚙️
+        Testing               : TEST
+        Documentation         : DOC
+        Dependency Pins       : PIN
+        Code Refactorization  : REF
+        Miscellaneous         : MAINT
 
-Any commit whose subject does not start with one of those prefixes (matched as
-``PREFIX:`` exactly, including the colon) lands in an "Uncategorized" section for
-manual review. Release-machinery commits (REL:/DEV:) created by the join-release
-action are skipped entirely.
+Recognized prefixes are stripped from the rendered line item (only the commit
+message, sha link, and author remain). Any commit whose subject does not start
+with a recognized prefix (matched as ``PREFIX:`` exactly, including the colon)
+lands in an "Uncategorized" section for manual review, with its subject left
+intact. Release-machinery commits (REL:/DEV:/LANG:/PREP:) created by the
+join-release action are skipped entirely.
 """
 
 API = "https://api.github.com"
 
-# prefix -> category
-PREFIX_CATEGORY = {
-    "API": "Breaking Changes",
-    "DEPR": "Breaking Changes",
-    "NEW": "New Features!",
-    "ENH": "New Features!",
-    "BUG": "Bug Fixes",
-    "MAINT": "Maintenance",
-    "TEST": "Maintenance",
-    "REF": "Maintenance",
-    "CI": "Maintenance",
-    "PIN": "Maintenance",
-    "DOC": "Maintenance",
-}
-
-# rendered in this order; empty sections are omitted
-CATEGORY_ORDER = [
-    "Breaking Changes",
-    "New Features!",
-    "Bug Fixes",
-    "Maintenance",
-    "Uncategorized",
+# Ordered category structure. Each category has a display name, an emoji, and an
+# ordered list of (subsection_name, prefix) pairs. A subsection_name of None
+# means the commits are listed directly under the category with no subheader.
+# Categories, subsections, and the Uncategorized bucket are only rendered when
+# they contain matching commits.
+CATEGORY_STRUCTURE = [
+    ("Breaking Changes", "💥", [
+        ("API Changes", "API"),
+        ("Deprecations", "DEPR"),
+    ]),
+    ("New and Improved!", "🚀", [
+        ("New Features", "NEW"),
+        ("Improvements", "IMP"),
+    ]),
+    ("Bug Fixes", "🪲", [
+        (None, "BUG"),
+    ]),
+    ("Maintenance", "⚙️", [
+        ("Testing", "TEST"),
+        ("Documentation", "DOC"),
+        ("Dependency Pins", "PIN"),
+        ("Code Refactorization", "REF"),
+        ("Miscellaneous", "MAINT"),
+    ]),
 ]
 
-# emoji appended to each category sub-header (Uncategorized has none)
-CATEGORY_EMOJI = {
-    "Breaking Changes": "💥",
-    "New Features!": "🚀",
-    "Bug Fixes": "🪲",
-    "Maintenance": "⚙️",
+# all prefixes that map to a category/subsection above
+KNOWN_PREFIXES = {
+    prefix for _, _, subs in CATEGORY_STRUCTURE for _, prefix in subs
 }
 
 # release-machinery commits created by the join-release action; these carry an
@@ -164,36 +174,77 @@ def get_commits(repo, base, head, token):
     return commits
 
 
+def strip_prefix(subject):
+    """Remove a leading ``PREFIX:`` and any following whitespace."""
+    return PREFIX_RE.sub("", subject, count=1).lstrip()
+
+
 def categorize(commits):
-    buckets = {cat: [] for cat in CATEGORY_ORDER}
-    for sha, subject, url, login, author_url in commits:
+    """Group commits by prefix.
+
+    Returns (by_prefix, uncategorized): a dict of prefix -> [entries] for
+    recognized prefixes, and a list of entries whose subject has no recognized
+    prefix. Skip-listed (release-machinery) commits are dropped.
+    """
+    by_prefix = {}
+    uncategorized = []
+    for entry in commits:
+        subject = entry[1]
         m = PREFIX_RE.match(subject)
         prefix = m.group(1) if m else None
         if prefix in SKIP_PREFIXES:
             continue
-        category = PREFIX_CATEGORY.get(prefix, "Uncategorized")
-        buckets[category].append((sha, subject, url, login, author_url))
-    return buckets
+        if prefix in KNOWN_PREFIXES:
+            by_prefix.setdefault(prefix, []).append(entry)
+        else:
+            uncategorized.append(entry)
+    return by_prefix, uncategorized
 
 
-def render(name, base, head, buckets):
+def format_item(entry, strip):
+    sha, subject, url, login, author_url = entry
+    message = strip_prefix(subject) if strip else subject
+    item = f"- {message} ([`{sha}`]({url})"
+    if login and author_url:
+        item += f" by [{login}]({author_url})"
+    item += ")"
+    return item
+
+
+def render(name, base, head, by_prefix, uncategorized):
     header_range = f"{base or '<initial>'} → {head}"
     lines = [f"## {name}", "", f"_Changes in {header_range}_", ""]
     any_content = False
-    for cat in CATEGORY_ORDER:
-        entries = buckets[cat]
-        if not entries:
+
+    for category, emoji, subs in CATEGORY_STRUCTURE:
+        # build subsection blocks that actually have commits
+        sub_blocks = []
+        for sub_name, prefix in subs:
+            entries = by_prefix.get(prefix)
+            if not entries:
+                continue
+            block = []
+            if sub_name:
+                block.append(f"##### {sub_name}")
+                block.append("")
+            block.extend(format_item(e, strip=True) for e in entries)
+            block.append("")
+            sub_blocks.append(block)
+        if not sub_blocks:
             continue
         any_content = True
-        emoji = CATEGORY_EMOJI.get(cat)
-        lines.append(f"#### {cat} {emoji}" if emoji else f"#### {cat}")
-        for sha, subject, url, login, author_url in entries:
-            entry = f"- {subject} ([`{sha}`]({url})"
-            if login and author_url:
-                entry += f" by [{login}]({author_url})"
-            entry += ")"
-            lines.append(entry)
+        lines.append(f"#### {category} {emoji}")
         lines.append("")
+        for block in sub_blocks:
+            lines.extend(block)
+
+    if uncategorized:
+        any_content = True
+        lines.append("#### Uncategorized")
+        lines.append("")
+        lines.extend(format_item(e, strip=False) for e in uncategorized)
+        lines.append("")
+
     if not any_content:
         lines.append("_No changes in this release._")
         lines.append("")
@@ -224,8 +275,8 @@ def main():
     print(f"{args.name}: comparing {base or '<initial>'}...{args.release_tag}")
 
     commits = get_commits(args.repo, base, args.release_tag, token)
-    buckets = categorize(commits)
-    fragment = render(args.name, base, args.release_tag, buckets)
+    by_prefix, uncategorized = categorize(commits)
+    fragment = render(args.name, base, args.release_tag, by_prefix, uncategorized)
 
     with open(args.output, "w") as fh:
         fh.write(fragment)
