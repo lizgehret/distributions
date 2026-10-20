@@ -1,9 +1,9 @@
 # this is the current release epoch (i.e. 20XX.REL)
-released_epoch: "2027.1"
+released_epoch: "2026.7"
 # this is the current dev cycle epoch (i.e. 20XX.REL+1)
-active_epoch: "2027.4"
+active_epoch: "2026.10"
 # this is the next dev cycle epoch (i.e. 20XX.REL+2)
-next_epoch: "2027.7"
+next_epoch: "2027.1"
 # qiime2 distro (formerly amplicon) renamed for rachis release 2026.4
 distros: [tiny, qiime2, moshpit, pathogenome, test]
 # primary_distro refers to the distribution used to run ci-dev for each plugin
@@ -26,15 +26,15 @@ packages:
 #   primary_distro: pathogenome
 
 # # formerly q2-moshpit
-# - name: q2-annotate
-#   repo: bokulich-lab/q2-annotate
-#   distros: [moshpit]
-#   primary_distro: moshpit
+- name: q2-annotate
+  repo: lizgehret/q2-annotate
+  distros: [moshpit]
+  primary_distro: moshpit
 
-# - name: q2-assembly
-#   repo: bokulich-lab/q2-assembly
-#   distros: [moshpit]
-#   primary_distro: moshpit
+- name: q2-assembly
+  repo: lizgehret/q2-assembly
+  distros: [moshpit]
+  primary_distro: moshpit
 
 # - name: q2-boots
 #   repo: caporaso-lab/q2-boots
@@ -46,15 +46,15 @@ packages:
 #   distros: [qiime2, test]
 #   primary_distro: qiime2
 
-# - name: q2-cutadapt
-#   repo: qiime2/q2-cutadapt
-#   distros: [qiime2, moshpit]
-#   primary_distro: qiime2
+- name: q2-cutadapt
+  repo: lizgehret/q2-cutadapt
+  distros: [qiime2, moshpit]
+  primary_distro: qiime2
 
-# - name: q2-dada2
-#   repo: qiime2/q2-dada2
-#   distros: [qiime2]
-#   primary_distro: qiime2
+- name: q2-dada2
+  repo: lizgehret/q2-dada2
+  distros: [qiime2]
+  primary_distro: qiime2
 
 # - name: q2-deblur
 #   repo: qiime2/q2-deblur
@@ -91,10 +91,10 @@ packages:
 #   distros: [qiime2]
 #   primary_distro: qiime2
 
-# - name: q2-feature-table
-#   repo: qiime2/q2-feature-table
-#   distros: [qiime2, moshpit, pathogenome]
-#   primary_distro: qiime2
+- name: q2-feature-table
+  repo: lizgehret/q2-feature-table
+  distros: [qiime2, moshpit, pathogenome]
+  primary_distro: qiime2
 
 # - name: q2-fondue
 #   repo: bokulich-lab/q2-fondue
@@ -116,10 +116,10 @@ packages:
   distros: [qiime2]
   primary_distro: qiime2
 
-# - name: q2-mag
-#   repo: bokulich-lab/q2-mag
-#   distros: [moshpit]
-#   primary_distro: moshpit
+- name: q2-mag
+  repo: lizgehret/q2-mag
+  distros: [moshpit]
+  primary_distro: moshpit
 
 - name: q2-metadata
   repo: lizgehret/q2-metadata
@@ -166,10 +166,10 @@ packages:
 #   distros: [qiime2]
 #   primary_distro: qiime2
 
-# - name: q2-taxa
-#   repo: qiime2/q2-taxa
-#   distros: [qiime2, moshpit]
-#   primary_distro: qiime2
+- name: q2-taxa
+  repo: lizgehret/q2-taxa
+  distros: [qiime2, moshpit]
+  primary_distro: qiime2
 
 - name: q2-types
   repo: lizgehret/q2-types
@@ -215,11 +215,11 @@ packages:
 # note: this repo does not use lib-ci-dev.yaml (custom nox/uv-based CI with no
 # `distro:` concept), so primary_distro is intentionally omitted.
 # See note on the `qiime2` proxy package above.
-# - name: rachis
-#   repo: rachis-org/rachis
-#   distros: [tiny, qiime2, moshpit, pathogenome, test]
+- name: rachis
+  repo: lizgehret/rachis
+  distros: [tiny, qiime2, moshpit, pathogenome, test]
 
-# - name: rescript
-#   repo: bokulich-lab/RESCRIPt
-#   distros: [qiime2, moshpit]
-#   primary_distro: qiime2
+- name: rescript
+  repo: lizgehret/RESCRIPt
+  distros: [qiime2, moshpit]
+  primary_distro: qiime2

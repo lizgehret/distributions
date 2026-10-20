@@ -2,9 +2,11 @@
 
 """Generate a per-repo changelog fragment for the collated release changelog.
 
-For a single repository, this pulls all commits between the previous stable
-release tag and the current release tag via the GitHub compare API, categorizes
-them by commit-message prefix, and writes a Markdown fragment to the ``output``
+For a single repository, this pulls the commits between the previous stable
+release tag and the current release tag via the GitHub compare API, keeps only
+the first-parent chain (one entry per squash-merged or merged PR, so a PR's
+individual branch commits are never listed), categorizes them by
+commit-message prefix, and writes a Markdown fragment to the ``output``
 path. The ``ci-collate-changelog`` workflow runs this action once per plugin
 (matrix) and then stitches the fragments into one alphabetically-sorted
 changelog, skipping empty fragments (plugins with no changes this cycle).
@@ -12,25 +14,27 @@ changelog, skipping empty fragments (plugins with no changes this cycle).
 Category / subsection -> prefix mapping (see CATEGORY_STRUCTURE below):
 
     Breaking Changes 💥
-        API Changes           : API
-        Deprecations          : DEPR
+        API Changes             : API
+        Deprecations            : DEPR
     New and Improved! 🚀
-        New Features          : NEW
-        Improvements          : IMP
-    Bug Fixes 🪲              : BUG   (no subsection)
+        New Features            : NEW
+        Improvements            : IMP
+    Bug Fixes 🪲                : BUG   (no subsection)
     Maintenance ⚙️
-        Testing               : TEST
-        Documentation         : DOC
-        Dependency Pins       : PIN
-        Code Refactorization  : REF
-        Miscellaneous         : MAINT
+        Testing                 : TEST
+        Documentation           : DOC
+        Dependency Pins         : PIN
+        Code Refactorization    : REF
+        Continuous Integration  : CI
+        Miscellaneous           : MAINT
 
 Recognized prefixes are stripped from the rendered line item (only the commit
 message, sha link, and author remain). Any commit whose subject does not start
 with a recognized prefix (matched as ``PREFIX:`` exactly, including the colon)
 lands in an "Uncategorized" section for manual review, with its subject left
-intact. Release-machinery commits (REL:/DEV:/LANG:/PREP:) created by the
-join-release action are skipped entirely. A repository with no remaining
+intact. Release-machinery commits (REL:/DEV:) created by the join-release
+action, internal commits (LANG:/PREP:), and commits explicitly marked SKIP:
+are skipped entirely. A repository with no remaining
 changes yields an empty fragment.
 
 A GitHub token is read from the GH_TOKEN (or GITHUB_TOKEN) environment variable;
@@ -68,6 +72,7 @@ CATEGORY_STRUCTURE = [
         ("Documentation", "DOC"),
         ("Dependency Pins", "PIN"),
         ("Code Refactorization", "REF"),
+        ("Continuous Integration", "CI"),
         ("Miscellaneous", "MAINT"),
     ]),
 ]
@@ -77,9 +82,12 @@ KNOWN_PREFIXES = {
     prefix for _, _, subs in CATEGORY_STRUCTURE for _, prefix in subs
 }
 
-# release-machinery commits created by the join-release action; these carry an
-# empty "[skip ci]" payload and are excluded from the changelog entirely.
-SKIP_PREFIXES = {"REL", "DEV", "LANG", "PREP"}
+# commits excluded from the changelog entirely:
+#   REL/DEV   - release-machinery commits created by the join-release action
+#               (empty "[skip ci]" payload)
+#   LANG/PREP - internal changes users don't need to be aware of
+#   SKIP      - explicitly marked by the author as not changelog-worthy
+SKIP_PREFIXES = {"REL", "DEV", "LANG", "PREP", "SKIP"}
 
 # match "PREFIX:" exactly (uppercase letters followed by a colon)
 PREFIX_RE = re.compile(r"^([A-Z]+):")
@@ -138,22 +146,68 @@ def find_previous_tag(stable_tags, head_version):
     return max(candidates, key=lambda t: t[0])[1]
 
 
+def first_parent_chain(raw):
+    """Keep only the commits on the first-parent chain from the head commit.
+
+    Each PR is expected to land on the release line as a single commit: a
+    squash-merge (one parent) or a merge commit (two parents). Following only
+    first parents walks that mainline and drops the individual commits of any
+    PR branch that was merged with a merge commit instead of squashed (and any
+    "Merge branch 'dev' into <feature>" commits on those branches).
+
+    ``raw`` is a list of GitHub commit objects in any order. The head is the
+    one commit that is not a parent of any other commit in the list; the walk
+    stops at the first parent outside the list (the merge base, or the end of
+    history). Returns the kept commits oldest-first.
+    """
+    by_sha = {c["sha"]: c for c in raw}
+    parent_shas = {p["sha"] for c in raw for p in c.get("parents", [])}
+    heads = [sha for sha in by_sha if sha not in parent_shas]
+    if len(heads) != 1:
+        print(
+            f"::warning::expected one head commit, found {len(heads)}; "
+            "listing all commits instead of the first-parent chain"
+        )
+        return raw
+
+    chain = []
+    sha = heads[0]
+    while sha in by_sha:
+        commit = by_sha[sha]
+        chain.append(commit)
+        parents = commit.get("parents", [])
+        sha = parents[0]["sha"] if parents else None
+    chain.reverse()
+    return chain
+
+
 def get_commits(repo, base, head, token):
     """Return a list of (short_sha, subject, html_url, login, author_url).
 
-    If ``base`` is None (no prior release tag exists) all commits reachable from
-    ``head`` are returned instead.
+    Only the first-parent chain from ``head`` is returned (see
+    ``first_parent_chain``), i.e. one entry per squash-merged or merged PR plus
+    any commits pushed directly to the branch.
 
-    NOTE: the compare API returns at most 250 commits per response; releases that
-    span more than 250 commits would be truncated. This has not been an issue for
-    per-plugin release cycles, but is a known limitation.
+    If ``base`` is None (no prior release tag exists) the first-parent chain
+    over all history reachable from ``head`` is returned instead.
     """
+    raw = []
+    page = 1
     if base:
-        raw = gh_get(f"{API}/repos/{repo}/compare/{base}...{head}", token)
-        raw = raw.get("commits", [])
+        # the compare API caps an unpaginated response at 250 commits; paging
+        # (per_page <= 100) returns the full comparison
+        while True:
+            response = gh_get(
+                f"{API}/repos/{repo}/compare/{base}...{head}",
+                token,
+                params={"per_page": 100, "page": page},
+            )
+            batch = response.get("commits", [])
+            raw.extend(batch)
+            if not batch or len(raw) >= response.get("total_commits", 0):
+                break
+            page += 1
     else:
-        raw = []
-        page = 1
         while True:
             batch = gh_get(
                 f"{API}/repos/{repo}/commits",
@@ -168,7 +222,7 @@ def get_commits(repo, base, head, token):
             page += 1
 
     commits = []
-    for c in raw:
+    for c in first_parent_chain(raw):
         subject = c["commit"]["message"].splitlines()[0].strip()
         # c["author"] is the linked GitHub account (may be null for commits not
         # associated with a GitHub user); fall back to no author link.
@@ -189,7 +243,7 @@ def categorize(commits):
 
     Returns (by_prefix, uncategorized): a dict of prefix -> [entries] for
     recognized prefixes, and a list of entries whose subject has no recognized
-    prefix. Skip-listed (release-machinery) commits are dropped.
+    prefix. Skip-listed commits (see SKIP_PREFIXES) are dropped.
     """
     by_prefix = {}
     uncategorized = []
